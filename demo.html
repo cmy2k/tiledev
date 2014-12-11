@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
+</head>
+<body>
+  <div id="map" style="width: 1280px; height: 1024px"></div>
+  <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+  <script>
+    var map = L.map('map').setView([35, -90], 3);
+    
+    L.tileLayer('https://{s}.tiles.mapbox.com/v3/{id}/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+    
+    L.tileLayer('http://TILEPATHHERE/{z}/{x}/{y}.png', {
+      maxZoom: 15,
+	    maxNativeZoom: 12
+    }).addTo(map);
+    
+  </script>
+</body>
+</html>
