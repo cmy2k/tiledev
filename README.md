@@ -21,10 +21,17 @@ sudo pip install MapProxy
 ```
 
 # Generating tiles
+## ... from a source layer
+The installed gdal-bin comes with a utility called gdal2tiles. This converts an input data layer into a directory of output tiles. Its use is simple: 
+```shell
+gdal2tiles.py inputLayer.extension tile/output/path
+```
+
+Generally, the tiles will then be dumped in an output structure of /z/x/y
+
 ## ... from WMS
 In many cases, a WMS may exist that is slow and/or unreliable. In this case, tiles may be generated from this existing service and cached for serving by alternate means. The primary tool involved is [MapProxy](http://mapproxy.org/) that can perform a number of tasks, but the primary one most relevant for caching tiles is the seeding functionality.
-
-## ... from a source layer
+ 
 
 # Storing tiles
 ## Output observations
