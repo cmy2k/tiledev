@@ -118,7 +118,7 @@ To configure this custom error behavior:
 
 1. Select the Distribution
 2. Select Error Pages
-3. Create Custom Error Response for 403 and 404. Set the response code to 200 an4. the response page path to the blank tile in the store.
+3. Create Custom Error Response for 403 and 404. Set the response code to 200 and the response page path to the blank tile in the store.
 
 ## Serving from S3
 Tiles can be served directly from S3. This is a little simpler, but there are a few issues with doing this. First off, S3 is not optimized for serving content, so file response latencies are likely greater than if they are served from CF. Second, there are several limitations with handling non-existant files. Unless there are tiles for the full extent of the layer as configured in the viewer, it is possible for the client to make many requests to files that don't exist. S3 will respond with a 403 for these files. There is no concept of symlinks in S3 and the best alternative option is to provide an object for each possible file with a redirect header for it. This is clearly sub-optimal. 
