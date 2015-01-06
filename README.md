@@ -30,7 +30,35 @@ gdal2tiles.py inputLayer.extension tile/output/path
 Generally, the tiles will then be dumped in an output structure of /z/x/y
 
 ## ... from WMS
-In many cases, a WMS may exist that is slow and/or unreliable. In this case, tiles may be generated from this existing service and cached for serving by alternate means. The primary tool involved is [MapProxy](http://mapproxy.org/) that can perform a number of tasks, but the primary one most relevant for caching tiles is the seeding functionality. 
+In many cases, a WMS may exist that is slow and/or unreliable. In this case, tiles may be generated from this existing service and cached for serving by alternate means. The primary tool involved is [MapProxy](http://mapproxy.org/) that can perform a number of tasks, but the primary one most relevant for caching tiles is the seeding functionality.
+
+The seed command is used as follows:
+
+```shell
+mapproxy-seed -f mapproxy.yaml -s seed.yaml
+```
+
+There are a few properties that need to be defined for the seeding process.
+
+### seed.yaml
+The format should be obvious, but one important property is:
+```yaml
+levels:
+	to: 6
+```
+
+The levels to property defines the maximum number of levels that should be cached.
+
+### mapproxy.yaml
+Note that there is likely a lot of parameters defined in this file that are unnecessary. This file is a modified example configuration that comes with the applicaiton. For the most part, modifying the properties should be fairly obvious, but there are a few key parameters that needed to be changed to make the seeding useful. The main one can be found under caches -> osm_cache:
+
+```yaml
+cache:
+	type: file
+	directory_layout: tms
+```
+
+This overrides the default caching behavior that outputs the file in a directory structure that isn't immediately usable. With type: file and directory_layout: tms, the output follows the /z/x/y directory structure.
 
 # Storing tiles
 ## Output observations

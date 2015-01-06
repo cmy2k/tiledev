@@ -1,0 +1,9 @@
+seeds:
+  seed1:
+    caches: [osm_cache]
+    levels:
+      to: 6
+
+cleanups:
+
+coverages:
