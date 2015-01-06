@@ -78,6 +78,18 @@ Assuming that each tile is 12K on disk, extrapolating these numbers out to 19 zo
 
 This is over 1.3 billion tiles and nearly 16 terabytes on disk. And remember that the equation likely vastly underestimates the actual output.
 
+### Helpful commands
+To count all files in the tile dir:
+```shell
+find outputDir/ -follow -type f | wc -l
+```
+
+To count all non-empty tiles:
+```shell
+find outputDir/ -follow -type f -size 693c | wc -l
+```
+Note that in this case, empty tiles are 693 bytes - YMMV.
+
 ## Transport from EC2 to S3
 The easiest tool that fits with the Python/PIP functionality above is the [awscli](http://aws.amazon.com/cli/).
 
@@ -93,3 +105,96 @@ Moving files to S3 then is as simple as:
 ```shell
 aws s3 cp tile/output/path s3://bucketName/destination/path --recursive
 ```
+# Serving Tiles from AWS
+There are several options for serving the tiles from AWS.
+
+## Serving from S3
+Most simply, the tiles can be served directly from S3. There are a few issues with doing this. First off, S3 is not optimized for serving content. Second, there are several limitations with handling non-existant files. Unless there are tiles for the full extent of the layer as configured in the viewer, it is possible for the client to make many requests to files that don't exist. S3 will respond with a 403 for these files. There is no concept of symlinks in S3 and the best alternative option is to provide an object for each possible file with a redirect header for it. This is clearly sub-optimal. 
+
+If performance isn't a concern and there are tiles for all possible requested extents, S3 may be fine. Several things must be configured before S3 contents can become public.
+
+### Making bucket public
+1. Go to S3 Management Console
+2. Select the bucket -> Properties
+3. Permissions -> Add (or Edit) bucket policy
+4. Set some variant of the following policy:
+
+```json
+{
+  "Version":"2012-10-17",
+  "Statement":[{
+    "Sid":"AllowPublicRead",
+        "Effect":"Allow",
+      "Principal": {
+            "AWS": "*"
+         },
+      "Action":["s3:GetObject"],
+      "Resource":["arn:aws:s3:::changeThisToYourBucketName/*"
+      ]
+    }
+  ]
+}
+```
+
+### CORS configuration
+Even if the bucket contents are public, any machines attempting to access the files are likely to run into permission issues with cross-origin resources. To resolve:
+
+1. Go to S3 Management Console
+2. Select the bucket -> Properties
+3. Permissions -> Add (or Edit) CORS Configuration
+4. Set some variant of the following configuration:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <CORSRule>
+        <AllowedOrigin>*</AllowedOrigin>
+        <AllowedMethod>GET</AllowedMethod>
+        <MaxAgeSeconds>3000</MaxAgeSeconds>
+        <AllowedHeader>Authorization</AllowedHeader>
+    </CORSRule>
+</CORSConfiguration>
+```
+
+### DNS mapping
+See [this link](https://docs.aws.amazon.com/AmazonS3/latest/dev/website-hosting-custom-domain-walkthrough.html) for mapping S3 to a custom domain name.
+
+## Serving from CloudFront
+CloudFront (CF) is the AWS CDN and is the preferred way for serving static content. There are several good reasons to use CF.
+
+1. Some informal testing with POSTman shows that a request for a tile from S3 completes in about 100-300ms, while a request for the same tile from CF responds in about 50-80ms.
+
+2. With CF, custom error behaviors can be defined. In the case of tiles, there may be extents that are requested by the client that don't exist. Instead of responding with a 403 like S3 does, CloudFront can be configured to handle 404s and 403s with a 200 and a specified response. So, if an image that doesn't exist is requested, CF can respond by providing a single transparent PNG. This is especially critical for sparse data sets where the majority of tiles may in fact be blank. In the above example, around 66% of files were empty. A massive amount of storage could be saved by discarding all empty files and providing instead one transparent tile with the custom error response.
+
+To configure this custom error behavior:
+
+a. Select the Distribution
+b. Select Error Pages
+c. Create Custom Error Response for 403 and 404. Set the response code to 200 and the response page path to the blank tile in the store.
+
+# Cost to store in S3 and serve with CloudFront
+Note that the following estimates are based on ealry 2015 prices. These regularly drop in price. For example, in late 2014 when I was first investigating this, the cost to transfer data between S3 and CF was $0.02/GB, now it is free. Edge locations were selected only for US and Europe.
+
+Using the CONUS-scale 231m resolution example raster, with 1-12 zoom levels, the tile collection consists of about 160k tiles for 2.3GB of storage.
+
+## One-time costs
+Note that the following is based on my best estimate on how CF caches files from S3. This would assume that all files would be cached in CF one time.
+
+| Step                                | Count and rate      | Cost  |
+|-------------------------------------|---------------------|------:|
+| HTTP requests to upload to S3       | 160k @ $0.005/1k    | $0.80 |
+| S3 HTTP requests to cache all in CF | 160k @ $0.004/10k   | $0.07 |
+| CF HTTP requests to S3              | 160k @ $0.0075/10k  | $0.12 |
+|                                     |                     |       |
+| Total one-time costs                | Total               | $0.99 |
+
+So, even if this estimate is off by an order of magnitude, the one time cost is fairly trivial.
+
+## Recurring costs
+| Step                          | Count and rate         | Cost       |
+|-------------------------------|------------------------|-----------:|
+| Storing tiles in S3           | 2.3GB @ $0.03/GB/mo    | $0.07/mo   |
+| GET requests                  | Variable @ $0.0075/10k | Variable   |
+| Data transfer out to internet | Variable @ $0.085/GB   | Variable   |
+
+Note that the data transfer cost is actually cheaper from CF than from S3. Depending on how transfer-heavy the requests are, it may end up being much more economical to go with CF than transferring data from S3, despite the slightly higher HTTP verb cost and the per-request cost to cache files.
