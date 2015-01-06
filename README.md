@@ -30,8 +30,7 @@ gdal2tiles.py inputLayer.extension tile/output/path
 Generally, the tiles will then be dumped in an output structure of /z/x/y
 
 ## ... from WMS
-In many cases, a WMS may exist that is slow and/or unreliable. In this case, tiles may be generated from this existing service and cached for serving by alternate means. The primary tool involved is [MapProxy](http://mapproxy.org/) that can perform a number of tasks, but the primary one most relevant for caching tiles is the seeding functionality.
- 
+In many cases, a WMS may exist that is slow and/or unreliable. In this case, tiles may be generated from this existing service and cached for serving by alternate means. The primary tool involved is [MapProxy](http://mapproxy.org/) that can perform a number of tasks, but the primary one most relevant for caching tiles is the seeding functionality. 
 
 # Storing tiles
 ## Output observations
@@ -108,8 +107,21 @@ aws s3 cp tile/output/path s3://bucketName/destination/path --recursive
 # Serving Tiles from AWS
 There are several options for serving the tiles from AWS.
 
+## Serving from CloudFront
+CloudFront (CF) is the AWS CDN and is the preferred way for serving static content. There are several good reasons to use CF.
+
+1. Some informal testing with POSTman shows that a request for a tile from S3 completes in about 100-300ms, while a request for the same tile from CF responds in about 50-80ms.
+
+2. With CF, custom error behaviors can be defined. In the case of tiles, there may be extents that are requested by the client that don't exist. Instead of responding with a 403 like S3 does, CloudFront can be configured to handle 404s and 403s with a 200 and a specified response. So, if an image that doesn't exist is requested, CF can respond by providing a single transparent PNG. This is especially critical for sparse data sets where the majority of tiles may in fact be blank. In the above example, around 66% of files were empty. A massive amount of storage could be saved by discarding all empty files and providing instead one transparent tile with the custom error response.
+
+To configure this custom error behavior:
+
+a. Select the Distribution
+b. Select Error Pages
+c. Create Custom Error Response for 403 and 404. Set the response code to 200 and the response page path to the blank tile in the store.
+
 ## Serving from S3
-Most simply, the tiles can be served directly from S3. There are a few issues with doing this. First off, S3 is not optimized for serving content. Second, there are several limitations with handling non-existant files. Unless there are tiles for the full extent of the layer as configured in the viewer, it is possible for the client to make many requests to files that don't exist. S3 will respond with a 403 for these files. There is no concept of symlinks in S3 and the best alternative option is to provide an object for each possible file with a redirect header for it. This is clearly sub-optimal. 
+Tiles can be served directly from S3. This is a little simpler, but there are a few issues with doing this. First off, S3 is not optimized for serving content, so file response latencies are likely greater than if they are served from CF. Second, there are several limitations with handling non-existant files. Unless there are tiles for the full extent of the layer as configured in the viewer, it is possible for the client to make many requests to files that don't exist. S3 will respond with a 403 for these files. There is no concept of symlinks in S3 and the best alternative option is to provide an object for each possible file with a redirect header for it. This is clearly sub-optimal. 
 
 If performance isn't a concern and there are tiles for all possible requested extents, S3 may be fine. Several things must be configured before S3 contents can become public.
 
@@ -158,19 +170,6 @@ Even if the bucket contents are public, any machines attempting to access the fi
 
 ### DNS mapping
 See [this link](https://docs.aws.amazon.com/AmazonS3/latest/dev/website-hosting-custom-domain-walkthrough.html) for mapping S3 to a custom domain name.
-
-## Serving from CloudFront
-CloudFront (CF) is the AWS CDN and is the preferred way for serving static content. There are several good reasons to use CF.
-
-1. Some informal testing with POSTman shows that a request for a tile from S3 completes in about 100-300ms, while a request for the same tile from CF responds in about 50-80ms.
-
-2. With CF, custom error behaviors can be defined. In the case of tiles, there may be extents that are requested by the client that don't exist. Instead of responding with a 403 like S3 does, CloudFront can be configured to handle 404s and 403s with a 200 and a specified response. So, if an image that doesn't exist is requested, CF can respond by providing a single transparent PNG. This is especially critical for sparse data sets where the majority of tiles may in fact be blank. In the above example, around 66% of files were empty. A massive amount of storage could be saved by discarding all empty files and providing instead one transparent tile with the custom error response.
-
-To configure this custom error behavior:
-
-a. Select the Distribution
-b. Select Error Pages
-c. Create Custom Error Response for 403 and 404. Set the response code to 200 and the response page path to the blank tile in the store.
 
 # Cost to store in S3 and serve with CloudFront
 Note that the following estimates are based on ealry 2015 prices. These regularly drop in price. For example, in late 2014 when I was first investigating this, the cost to transfer data between S3 and CF was $0.02/GB, now it is free. Edge locations were selected only for US and Europe.
