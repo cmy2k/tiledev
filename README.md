@@ -24,10 +24,27 @@ sudo pip install MapProxy
 ## ... from a source layer
 The installed gdal-bin comes with a utility called gdal2tiles. This converts an input data layer into a directory of output tiles. Its use is simple: 
 ```shell
-gdal2tiles.py inputLayer.extension tile/output/path
+gdal2tiles.py -z 1-10 inputLayer.extension tile/output/path
 ```
 
+The -z flag and following argument specifies that zoom levels 1 to 10 will be generated. Should the process terminate and you want to generate only the missing tiles, use the -e flag.
+
 Generally, the tiles will then be dumped in an output structure of /z/x/y
+
+I have observed that clipping a styled image works best while providing an output alpha band. This avoids black areas around the data. For example:
+
+```shell
+gdalwarp -q -cutline boundaryMask.shp -crop_to_cutline -dstalpha -of GTiff input.tif output.tif
+```
+
+I have also observed that gdal2tiles complains if the projection is 4326 or the like. My best results came from reprojecting the file to 3857, and running it as such. The commands would be:
+
+```shell
+gdalwarp -t_srs EPSG:3857 a.tif b.tif
+gdal2tiles.py -s EPSG:3857 -z 1-10 b.tif output/
+```
+
+Note: the output from gdal2tiles uses the TMS spec for naming tiles that reverses the oder of tiles. In order to have these appear correctly in Leaflet, the *tms* property must be set to true in the layer definition.
 
 ## ... from WMS
 In many cases, a WMS may exist that is slow and/or unreliable. In this case, tiles may be generated from this existing service and cached for serving by alternate means. The primary tool involved is [MapProxy](http://mapproxy.org/) that can perform a number of tasks, but the primary one most relevant for caching tiles is the seeding functionality.
